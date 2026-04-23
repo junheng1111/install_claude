@@ -1,52 +1,90 @@
 #!/bin/bash
 
-# --- 1. 定义路径 ---
-# macOS/Linux 习惯将本地二进制文件放在 ~/.local/bin
+# --- 1. Define Paths ---
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
 
-# --- 2. 检查并安装 Git ---
-# macOS 通常自带 Git，如果没有，建议通过 Homebrew 安装
-if ! command -v git &> /dev/null; then
-    echo "Git 未找到。正在尝试安装..."
-    
-    # 检查是否安装了 Homebrew
-    if command -v brew &> /dev/null; then
-        brew install git
+# --- 2. Check & Install Xcode Command Line Tools ---
+echo "Checking for Xcode Command Line Tools..."
+if ! xcode-select -p &> /dev/null; then
+    echo "Xcode Command Line Tools not found. Installing..."
+    # This triggers the GUI installer. 
+    # Note: Completely silent CLI install is difficult without sudo/softwareupdate, 
+    # but this is the standard approach for macOS.
+    touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+    PROD=$(softwareupdate -l | grep "\*.*Command Line" | tail -n 1 | awk -F"*" '{print $2}' | sed -e 's/^ *//' | tr -d '\n')
+    if [[ -n "$PROD" ]]; then
+        softwareupdate -i "$PROD" --verbose
     else
-        echo "请先安装 Homebrew (https://brew.sh/) 或 Xcode Command Line Tools。"
-        echo "你可以运行: xcode-select --install"
+        echo "Please install Xcode Tools manually: xcode-select --install"
         exit 1
     fi
 else
-    echo "Git 已安装: $(git --version)"
+    echo "Xcode Command Line Tools are already installed."
 fi
 
-# --- 3. 更新环境变量 ---
-# 识别当前的 Shell 配置文件 (.zshrc 或 .bash_profile)
-SHELL_CONFIG="$HOME/.zshrc"
-[[ "$SHELL" == */bash* ]] && SHELL_CONFIG="$HOME/.bash_profile"
-
-# 将路径添加到配置文件（如果尚未添加）
-if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
-    echo "正在将 $LOCAL_BIN 添加到 $SHELL_CONFIG..."
-    echo "export PATH=\"$LOCAL_BIN:\$PATH\"" >> "$SHELL_CONFIG"
+# --- 3. Check & Install Homebrew ---
+echo "Checking for Homebrew..."
+if ! command -v brew &> /dev/null; then
+    echo "Homebrew not found. Installing..."
+    # Official Homebrew install script (Non-interactive mode)
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" < /dev/null
     
-    # 立即对当前会话生效
-    export PATH="$LOCAL_BIN:$PATH"
-    echo "用户 PATH 已更新。"
+    # Set up Homebrew environment for the current session (Apple Silicon vs Intel)
+    if [[ -f /opt/homebrew/bin/brew ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f /usr/local/bin/brew ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+else
+    echo "Homebrew already installed: $(brew --version | head -n 1)"
 fi
 
-# --- 4. 安装 Claude Code ---
-echo "正在安装 Claude Code..."
-# 根据 Claude 官方 macOS 安装指令（通常使用 curl）
+# --- 4. Check & Install Git ---
+if ! command -v git &> /dev/null; then
+    echo "Git not found. Installing via Homebrew..."
+    brew install git
+else
+    echo "Git is already installed: $(git --version)"
+fi
+
+# --- 5. Update Environment Variables ---
+# Determine shell config file
+case "$SHELL" in
+    */zsh)  SHELL_CONFIG="$HOME/.zshrc" ;;
+    */bash) SHELL_CONFIG="$HOME/.bash_profile" ;;
+    *)      SHELL_CONFIG="$HOME/.profile" ;;
+esac
+
+# Ensure Homebrew and Local Bin are in PATH for future sessions
+{
+    if ! grep -q "$LOCAL_BIN" "$SHELL_CONFIG" 2>/dev/null; then
+        echo "export PATH=\"$LOCAL_BIN:\$PATH\"" >> "$SHELL_CONFIG"
+    fi
+    # Add Homebrew setup to shell config if brew was just installed
+    if command -v brew &> /dev/null && ! grep -q "brew shellenv" "$SHELL_CONFIG" 2>/dev/null; then
+        echo "eval \"\$($(brew --prefix)/bin/brew shellenv)\"" >> "$SHELL_CONFIG"
+    fi
+} 
+
+# Update current session PATH
+export PATH="$LOCAL_BIN:$PATH"
+
+# --- 6. Install Claude Code ---
+echo "Installing Claude Code..."
+# Claude Code typically requires Node.js/NPM. 
+# If the curl method is used, ensure it handles the install.
 curl -s https://claude.ai/install.sh | sh
 
-# --- 5. 验证安装 ---
-echo -e "\n验证结果:"
-git --version
+# --- 7. Verification ---
+echo -e "\n--- Final Verification ---"
+echo "Git: $(git --version)"
+if command -v brew &> /dev/null; then
+    echo "Brew: $(brew --version | head -n 1)"
+fi
+
 if command -v claude &> /dev/null; then
-    claude --version
+    echo "Claude Code: $(claude --version)"
 else
-    echo "Claude 命令暂未在当前窗口生效，请运行 'source $SHELL_CONFIG' 或重启终端。"
+    echo "Note: If 'claude' command is not found, run: source $SHELL_CONFIG"
 fi
