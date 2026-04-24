@@ -1,58 +1,61 @@
-# --- 1. Define Paths ---
-$localBin = "$env:USERPROFILE\.local\bin"
-$gitDir = "$localBin\git"
-if (!(Test-Path $localBin)) { New-Item -ItemType Directory -Force $localBin }
+# --- 1. Define Local Paths (User Profile Only) ---
+$localDir = "$env:USERPROFILE\.local"
+$binDir = "$localDir\bin"
+$gitDir = "$localDir\git"
 
-# --- 2. Install Git Portable (No Admin Required) ---
-if (!(Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Git not found. Downloading Portable edition..." -ForegroundColor Cyan
-    
-    # Official Git for Windows Portable Link
+if (!(Test-Path $binDir)) { New-Item -ItemType Directory -Force $binDir }
+
+# --- 2. Install Portable Git (No Admin Required) ---
+if (!(Test-Path "$gitDir\cmd\git.exe")) {
+    Write-Host "Downloading Portable Git..." -ForegroundColor Cyan
     $gitUrl = "https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/PortableGit-2.44.0-64-bit.7z.exe"
-    $exePath = "$localBin\git_portable.exe"
-
-    # Download via PowerShell
-    Invoke-WebRequest -Uri $gitUrl -OutFile $exePath
+    $gitExe = "$binDir\git_portable.exe"
+    
+    Invoke-WebRequest -Uri $gitUrl -OutFile $gitExe
     
     Write-Host "Extracting Git to $gitDir..." -ForegroundColor Cyan
-    # -y: Yes to all, -o: Output directory
-    Start-Process -FilePath $exePath -ArgumentList "-y", "-o`"$gitDir`"" -Wait
-    
-    # Clean up the installer
-    Remove-Item $exePath
+    # Extracting to User folder doesn't require Admin
+    Start-Process -FilePath $gitExe -ArgumentList "-y", "-o`"$gitDir`"" -Wait
+    Remove-Item $gitExe
 }
 
-# --- 3. Update Environment Variables ---
-# Git binary is located in the 'cmd' subdirectory of the portable folder
-$gitBinPath = "$gitDir\cmd"
-$currentPath = [Environment]::GetEnvironmentVariable("PATH", [EnvironmentVariableTarget]::User)
-
-$requiredPaths = @($localBin, $gitBinPath)
-$updatedPath = $currentPath
-
-foreach ($path in $requiredPaths) {
-    if ($updatedPath -notlike "*$path*") {
-        $updatedPath = "$path;$updatedPath"
-    }
+# --- 3. FIX: Set Claude Code Specific Bash Path ---
+# This resolves the 'requires git-bash' error
+$bashPath = "$gitDir\bin\bash.exe"
+if (Test-Path $bashPath) {
+    # Set User-level environment variable (No Admin needed)
+    [Environment]::SetEnvironmentVariable("CLAUDE_CODE_GIT_BASH_PATH", $bashPath, "User")
+    $env:CLAUDE_CODE_GIT_BASH_PATH = $bashPath
+    Write-Host "SUCCESS: CLAUDE_CODE_GIT_BASH_PATH set to $bashPath" -ForegroundColor Green
 }
 
-if ($updatedPath -ne $currentPath) {
-    [Environment]::SetEnvironmentVariable("PATH", $updatedPath, [EnvironmentVariableTarget]::User)
-    Write-Host "User PATH updated successfully." -ForegroundColor Green
+# --- 4. Increase Memory Limit for Node.js (Fixes Out of Memory) ---
+$env:NODE_OPTIONS = "--max-old-space-size=4096"
+
+# --- 5. Update User PATH ---
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+$gitCmdPath = "$gitDir\cmd"
+
+if ($userPath -notlike "*$gitCmdPath*") {
+    $newPath = "$gitCmdPath;$binDir;" + $userPath
+    [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
+    $env:PATH = "$gitCmdPath;$binDir;" + $env:PATH
+    Write-Host "User PATH updated." -ForegroundColor Green
 }
 
-# Apply to the current session immediately
-foreach ($path in $requiredPaths) {
-    if ($env:PATH -notlike "*$path*") {
-        $env:PATH = "$path;$env:PATH"
-    }
-}
-
-# --- 4. Install Claude Code ---
+# --- 6. Install Claude Code ---
 Write-Host "Installing Claude Code..." -ForegroundColor Cyan
-irm https://claude.ai/install.ps1 | iex
+try {
+    # Using the official installer within the current memory-boosted session
+    irm https://claude.ai/install.ps1 | iex
+} catch {
+    Write-Host "Direct install failed. Attempting via NPM if available..." -ForegroundColor Yellow
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        npm install -g @anthropic-ai/claude-code
+    }
+}
 
-# --- 5. Verification ---
+# --- 7. Verification ---
 Write-Host "`nVerification:" -ForegroundColor Green
 git --version
-claude --version
+Write-Host "Note: If 'claude' command is not found, restart your terminal/VS Code." -ForegroundColor Yellow
