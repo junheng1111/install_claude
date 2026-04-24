@@ -31,3 +31,5 @@
 ]
 ```
 **VScode中 的claude code 输入的url和token 和CC switch中输入的url 和Key 是一致的**
+
+https://docs.qq.com/sheet/DZHdsZnFDRnJsb09j?tab=BB08J2
