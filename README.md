@@ -26,7 +26,7 @@
         },
         {
             "name": "ANTHROPIC_AUTH_TOKEN",
-            "value": "TOKEN
+            "value": "TOKEN"
         }
 ]
 ```
