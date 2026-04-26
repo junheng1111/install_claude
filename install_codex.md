@@ -1,5 +1,5 @@
 # 安装codex 
-1. 浏览器输入连接 （https://openai.com/zh-Hans-CN/codex/）
+1. 浏览器输入连接 （ https://openai.com/zh-Hans-CN/codex/ ）
 2. 点击图片中的下载for windows
    ![alt text](image-6.png)
 3. 等待下载完成后
