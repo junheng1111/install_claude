@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Music Visualizer ✦ 音乐可视化</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a1a;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── 星空背景 ── */
+    #stars {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── 光晕 ── */
+    .glow-ring {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.18;
+      transition: transform 0.1s ease, opacity 0.3s ease;
+      pointer-events: none;
+    }
+    #ring1 { width: 500px; height: 500px; background: #8b5cf6; top: 10%; left: 5%; }
+    #ring2 { width: 400px; height: 400px; background: #06b6d4; bottom: 5%; right: 5%; }
+    #ring3 { width: 300px; height: 300px; background: #f472b6; top: 50%; left: 50%; transform: translate(-50%,-50%); }
+
+    /* ── Canvas 可视化 ── */
+    #vizCanvas {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 50vh;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    /* ── 中心 Card ── */
+    .card {
+      position: relative;
+      z-index: 10;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(20px);
+      border-radius: 28px;
+      padding: 48px 56px;
+      text-align: center;
+      max-width: 520px;
+      width: 90%;
+      box-shadow: 0 0 60px rgba(139,92,246,0.2), 0 0 120px rgba(6,182,212,0.1);
+    }
+
+    .album-art {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: linear-gradient(135deg,#8b5cf6,#06b6d4,#f472b6);
+      margin: 0 auto 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 52px;
+      box-shadow: 0 0 40px rgba(139,92,246,0.5);
+      transition: transform 0.05s linear;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      background: linear-gradient(to right, #c084fc, #67e8f9, #f9a8d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+      letter-spacing: 0.02em;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 32px;
+      letter-spacing: 0.08em;
+    }
+
+    /* ── Progress bar ── */
+    .progress-wrap {
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      margin-bottom: 24px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    #progressBar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(to right, #8b5cf6, #06b6d4);
+      border-radius: 4px;
+      transition: width 0.5s linear;
+    }
+
+    /* ── Time ── */
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 28px;
+    }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: rgba(255,255,255,0.6);
+      font-size: 1.4rem;
+      transition: color 0.2s, transform 0.15s;
+    }
+    .btn:hover { color: #fff; transform: scale(1.15); }
+
+    .btn-play {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+      border: none;
+      cursor: pointer;
+      font-size: 1.6rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 24px rgba(139,92,246,0.6);
+      transition: transform 0.15s, box-shadow 0.2s;
+    }
+    .btn-play:hover {
+      transform: scale(1.08);
+      box-shadow: 0 0 40px rgba(139,92,246,0.9);
+    }
+
+    /* ── 提示文字 ── */
+    .hint {
+      position: fixed;
+      z-index: 20;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.75rem;
+      color: rgba(255,255,255,0.3);
+      letter-spacing: 0.06em;
+    }
+
+    /* ── Mini bars (equalizer badge) ── */
+    .eq-badge {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 18px;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    .eq-bar {
+      width: 3px;
+      background: #a78bfa;
+      border-radius: 2px;
+      animation: eqAnim 0.8s ease-in-out infinite alternate;
+    }
+    .eq-bar:nth-child(1){ height:6px; animation-delay:0s; }
+    .eq-bar:nth-child(2){ height:12px; animation-delay:0.15s; }
+    .eq-bar:nth-child(3){ height:18px; animation-delay:0.3s; }
+    .eq-bar:nth-child(4){ height:10px; animation-delay:0.45s; }
+    .eq-bar:nth-child(5){ height:15px; animation-delay:0.6s; }
+    @keyframes eqAnim {
+      from { transform: scaleY(0.3); opacity:0.5; }
+      to   { transform: scaleY(1.2); opacity:1; }
+    }
+    .eq-badge.paused .eq-bar { animation-play-state: paused; }
+  </style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+<div class="glow-ring" id="ring1"></div>
+<div class="glow-ring" id="ring2"></div>
+<div class="glow-ring" id="ring3"></div>
+
+<canvas id="vizCanvas"></canvas>
+
+<div class="card">
+  <div class="album-art" id="albumArt">🎵</div>
+
+  <h1>
+    星河漫游
+    <span class="eq-badge paused" id="eqBadge">
+      <span class="eq-bar"></span>
+      <span class="eq-bar"></span>
+      <span class="eq-bar"></span>
+      <span class="eq-bar"></span>
+      <span class="eq-bar"></span>
+    </span>
+  </h1>
+  <p class="subtitle">COSMIC JOURNEY · MUSIC VISUALIZER</p>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div id="progressBar"></div>
+  </div>
+  <div class="time-row">
+    <span id="timeCur">0:00</span>
+    <span id="timeTot">—</span>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="btnPrev" title="上一首">⏮</button>
+    <button class="btn-play" id="btnPlay" title="播放/暂停">▶</button>
+    <button class="btn" id="btnNext" title="下一首">⏭</button>
+  </div>
+</div>
+
+<!-- 上传本地音乐 -->
+<label class="hint" style="cursor:pointer;" title="点击上传本地音乐文件">
+  🎧 点击上传本地音乐 &nbsp;
+  <input type="file" id="fileInput" accept="audio/*" style="display:none"/>
+</label>
+
+<audio id="audio" crossorigin="anonymous"></audio>
+
+<script>
+// ══════════════════════════════════════
+//  星空生成
+// ══════════════════════════════════════
+(function initStars(){
+  const cvs = document.getElementById('stars');
+  const ctx = cvs.getContext('2d');
+  let W, H, stars=[];
+  function resize(){ W=cvs.width=window.innerWidth; H=cvs.height=window.innerHeight; }
+  function mkStars(){
+    stars=[];
+    for(let i=0;i<180;i++){
+      stars.push({ x:Math.random()*W, y:Math.random()*H,
+        r:Math.random()*1.4+0.3, a:Math.random(), da:(Math.random()-0.5)*0.008 });
+    }
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    stars.forEach(s=>{
+      s.a+=s.da; if(s.a<=0||s.a>=1) s.da*=-1;
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,255,255,${s.a.toFixed(2)})`; ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  resize(); mkStars(); draw();
+  window.addEventListener('resize',()=>{ resize(); mkStars(); });
+})();
+
+// ══════════════════════════════════════
+//  音频 + 可视化
+// ══════════════════════════════════════
+const audio     = document.getElementById('audio');
+const btnPlay   = document.getElementById('btnPlay');
+const eqBadge   = document.getElementById('eqBadge');
+const albumArt  = document.getElementById('albumArt');
+const progressBar= document.getElementById('progressBar');
+const timeCur   = document.getElementById('timeCur');
+const timeTot   = document.getElementById('timeTot');
+const fileInput = document.getElementById('fileInput');
+const vizCanvas = document.getElementById('vizCanvas');
+const vctx      = vizCanvas.getContext('2d');
+
+let audioCtx, analyser, source, dataArray, bufLen;
+let isPlaying = false;
+let animId;
+let rotation = 0;
+
+function fmt(s){ const m=Math.floor(s/60); return m+':'+(Math.floor(s%60)+'').padStart(2,'0'); }
+
+// ─ 初始化 Web Audio ─
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  bufLen = analyser.frequencyBinCount;
+  dataArray = new Uint8Array(bufLen);
+  source = audioCtx.createMediaElementSource(audio);
+  source.connect(analyser);
+  analyser.connect(audioCtx.destination);
+}
+
+// ─ 播放/暂停 ─
+btnPlay.addEventListener('click', async ()=>{
+  if(!audio.src && !audio.currentSrc){
+    // 没有音源：提示上传
+    showToast('请先上传音乐文件 🎵'); return;
+  }
+  initAudio();
+  if(audioCtx.state==='suspended') await audioCtx.resume();
+  if(!isPlaying){ audio.play(); } else { audio.pause(); }
+});
+
+audio.addEventListener('play', ()=>{
+  isPlaying=true; btnPlay.textContent='⏸';
+  eqBadge.classList.remove('paused');
+  if(!animId) animate();
+});
+audio.addEventListener('pause', ()=>{
+  isPlaying=false; btnPlay.textContent='▶';
+  eqBadge.classList.add('paused');
+});
+audio.addEventListener('ended', ()=>{
+  isPlaying=false; btnPlay.textContent='▶';
+  eqBadge.classList.add('paused');
+});
+
+// 进度
+audio.addEventListener('timeupdate', ()=>{
+  if(!audio.duration) return;
+  const pct = (audio.currentTime / audio.duration)*100;
+  progressBar.style.width = pct+'%';
+  timeCur.textContent = fmt(audio.currentTime);
+});
+audio.addEventListener('loadedmetadata', ()=>{
+  timeTot.textContent = fmt(audio.duration);
+});
+
+// 点击进度条跳转
+document.getElementById('progressWrap').addEventListener('click', e=>{
+  if(!audio.duration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  audio.currentTime = ((e.clientX-rect.left)/rect.width)*audio.duration;
+});
+
+// ─ 上传本地文件 ─
+fileInput.addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  audio.src = url;
+  document.querySelector('h1').childNodes[0].textContent = file.name.replace(/\.[^.]+$/,'') + ' ';
+  initAudio();
+  audio.play();
+});
+
+// ─ Canvas 可视化动画 ─
+function animate(){
+  animId = requestAnimationFrame(animate);
+
+  const W = vizCanvas.width  = window.innerWidth;
+  const H = vizCanvas.height = vizCanvas.offsetHeight;
+
+  vctx.clearRect(0,0,W,H);
+
+  if(analyser){
+    analyser.getByteFrequencyData(dataArray);
+  }
+
+  //── 镜像条形频谱 ──
+  const barCount = bufLen;
+  const barW = W / barCount;
+
+  for(let i=0;i<barCount;i++){
+    const v = analyser ? dataArray[i]/255 : 0;
+    const barH = v * H * 0.85 + 2;
+    const hue = 260 + i * (120/barCount);
+    const alpha = 0.55 + v*0.45;
+
+    // 渐变条
+    const grad = vctx.createLinearGradient(0, H, 0, H-barH);
+    grad.addColorStop(0, `hsla(${hue},80%,60%,${alpha})`);
+    grad.addColorStop(1, `hsla(${hue+40},90%,80%,0.1)`);
+    vctx.fillStyle = grad;
+    vctx.fillRect(i*barW, H-barH, barW-1, barH);
+  }
+
+  //── 专辑封面随节拍旋转 ──
+  let avgEnergy = 0;
+  if(analyser){
+    for(let i=0;i<bufLen;i++) avgEnergy += dataArray[i];
+    avgEnergy /= bufLen;
+  }
+  if(isPlaying){
+    rotation += 0.3 + avgEnergy*0.015;
+    albumArt.style.transform = `rotate(${rotation}deg)`;
+  }
+
+  //── 光晕随低频脉冲 ──
+  const bass = analyser ? (dataArray[2]||0)/255 : 0;
+  document.getElementById('ring3').style.transform =
+    `translate(-50%,-50%) scale(${1 + bass*0.4})`;
+  document.getElementById('ring3').style.opacity = 0.15 + bass*0.25;
+}
+
+// 首次加载：无音源时也跑星空 + 静态可视化帧
+animate();
+
+// ── 提示 Toast ──
+function showToast(msg){
+  let t=document.createElement('div');
+  t.textContent=msg;
+  Object.assign(t.style,{
+    position:'fixed',bottom:'70px',left:'50%',transform:'translateX(-50%)',
+    background:'rgba(139,92,246,0.85)',color:'#fff',padding:'10px 24px',
+    borderRadius:'20px',fontSize:'0.85rem',zIndex:99,
+    backdropFilter:'blur(10px)',transition:'opacity 0.5s'
+  });
+  document.body.appendChild(t);
+  setTimeout(()=>{ t.style.opacity=0; setTimeout(()=>t.remove(),600); },2200);
+}
+</script>
+</body>
+</html>
